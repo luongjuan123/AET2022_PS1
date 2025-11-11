@@ -75,8 +75,19 @@ void setup() {
   }
 }
 
-void loop() {
-  Serial.prinln("Do you want to connect to another wifi ?");
-  int option = Serial.parseInt();;
-
-}
+78  void loop() {
+79    Serial.println("\nDo you want to connect to another Wi-Fi? (y/n): ");
+80
+81    while (!Serial.available()); // Chờ người dùng nhập
+82    char option = Serial.read(); // Đọc ký tự đầu tiên
+83
+84    if (option == 'y' || option == 'Y') {
+85      Serial.println("Restarting to scan new Wi-Fi...");
+86      delay(1000);
+87      ESP.restart(); // Quét lại mạng mới
+88    } else {
+89      Serial.println("Staying connected to current Wi-Fi.");
+90    }
+91
+92    delay(5000); // Tránh in quá nhanh
+93  }
