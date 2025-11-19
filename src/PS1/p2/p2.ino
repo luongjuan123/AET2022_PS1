@@ -1,36 +1,55 @@
 #include <WiFi.h>
 
-// Khai báo SSID và Password
-const char* SSID = "ESP3";
-const char* PASSWORD = "juan123";
+// ---- WiFi STA (WiFi nhà bạn) ----
+const char* STA_SSID = "VJU Student";
+const char* STA_PASS = "studentVJU@2022";
+
+// ---- WiFi AP (WiFi ESP32 phát ra) ----
+const char* AP_SSID = "ESP3afafaf2";
+const char* AP_PASS = "juan12345678";
 
 void setup() {
   Serial.begin(115200);
-  delay(500); // Đợi Serial sẵn sàng
+  delay(500);
 
-  // --- Cấu hình IP tĩnh cho Access Point ---
-  const IPAddress apIP(192, 168, 4, 1);
-  const IPAddress subnet(255, 255, 255, 0);
+  // --- Bật chế độ Dual Mode: STA + AP ---
+  WiFi.mode(WIFI_AP_STA);
 
-  WiFi.softAPConfig(apIP, apIP, subnet);
-  WiFi.softAP(SSID, PASSWORD);
+  // ===== KẾT NỐI TỚI ROUTER (STA) =====
+  Serial.printf("Connecting to WiFi: %s...\n", STA_SSID);
+  WiFi.begin(STA_SSID, STA_PASS);
 
-  // --- In thông tin AP ---
-  Serial.println("\n===== ESP32 Access Point Started =====");
-  Serial.printf("SSID: %s\n", SSID);
-  Serial.printf("Password: %s\n", PASSWORD);
-  Serial.printf("AP IP Address: %s\n", WiFi.softAPIP().toString().c_str());
-  Serial.println("======================================");
+  int retry = 0;
+  while (WiFi.status() != WL_CONNECTED && retry < 20) {
+    delay(500);
+    Serial.print(".");
+    retry++;
+  }
+
+  if(WiFi.status() == WL_CONNECTED) {
+    Serial.println("\nConnected to home WiFi!");
+    Serial.print("STA IP: ");
+    Serial.println(WiFi.localIP());
+  } else {
+    Serial.println("\nFailed to connect to home WiFi!");
+  }
+
+  // ===== KHỞI TẠO AP =====
+  WiFi.softAP(AP_SSID, AP_PASS);
+  Serial.println("AP Started!");
+  Serial.print("AP SSID: ");
+  Serial.println(AP_SSID);
+  Serial.print("AP IP: ");
+  Serial.println(WiFi.softAPIP());
 }
 
 void loop() {
-  static int lastClientCount = -1;
-  const int currentClientCount = WiFi.softAPgetStationNum();
+  static int last = -1;
+  int devices = WiFi.softAPgetStationNum();
 
-  // Chỉ in khi số lượng thiết bị thay đổi
-  if (currentClientCount != lastClientCount) {
-    Serial.printf("📶 Connected devices: %d\n", currentClientCount);
-    lastClientCount = currentClientCount;
+  if (devices != last) {
+    Serial.printf("📶 Devices connected to ESP32 AP: %d\n", devices);
+    last = devices;
   }
 
   delay(2000);

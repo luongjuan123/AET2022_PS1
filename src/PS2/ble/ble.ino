@@ -1,51 +1,86 @@
 #include <BLEDevice.h>
-#include <BLEUtils.h>
 #include <BLEServer.h>
+#include <BLEUtils.h>
+#include <BLE2902.h>
 
-#define LED_PIN 2
+BLEServer* pServer = NULL;
+BLECharacteristic* pCharacteristic = NULL;
 
-// UUID tự tạo
-#define SERVICE_UUID        "4fafc201-1fb5-459e-8fcc-c5c9c331914b"
-#define CHAR_SENSOR_UUID    "beb5483e-36e1-4688-b7f5-ea07361b26a8"
-#define CHAR_LED_UUID       "cd20c738-2c42-4a58-840a-c3b73a1b8e47"
+bool deviceConnected = false;
 
-BLECharacteristic *sensorChar;
-BLECharacteristic *ledChar;
+#define SERVICE_UUID        "6E400001-B5A3-F393-E0A9-E50E24DCCA9E" 
+#define CHARACTERISTIC_UUID "6E400003-B5A3-F393-E0A9-E50E24DCCA9E" // notify
+#define WRITE_UUID          "6E400002-B5A3-F393-E0A9-E50E24DCCA9E" // write
 
-class LEDCallback : public BLECharacteristicCallbacks {
-  void onWrite(BLECharacteristic* characteristic) {
-    std::string value = characteristic->getValue();
-    if (value == "1") digitalWrite(LED_PIN, HIGH);
-    else digitalWrite(LED_PIN, LOW);
+class MyServerCallbacks : public BLEServerCallbacks {
+  void onConnect(BLEServer* pServer) {
+    deviceConnected = true;
+  }
+
+  void onDisconnect(BLEServer* pServer) {
+    deviceConnected = false;
+  }
+};
+
+class WriteCallback : public BLECharacteristicCallbacks {
+  void onWrite(BLECharacteristic *pCharacteristic) {
+    String rxValue = pCharacteristic->getValue();
+    if (rxValue.length() > 0) {
+      Serial.print("Received from phone: ");
+      Serial.println(rxValue.c_str());
+    }
   }
 };
 
 void setup() {
   Serial.begin(115200);
-  pinMode(LED_PIN, OUTPUT);
 
-  BLEDevice::init("ESP32_BLE");
+  BLEDevice::init("ESP32-gggkBLE");   // ↔️ Tên BLE (giống SSID)
+  pServer = BLEDevice::createServer();
+  pServer->setCallbacks(new MyServerCallbacks());
 
-  BLEServer *server = BLEDevice::createServer();
-  BLEService *service = server->createService(SERVICE_UUID);
+  BLEService *pService = pServer->createService(SERVICE_UUID);
 
-  sensorChar = service->createCharacteristic(
-    CHAR_SENSOR_UUID,
-    BLECharacteristic::PROPERTY_READ
-  );
+  // Notify characteristic (ESP32 → Phone)
+  pCharacteristic = pService->createCharacteristic(
+                     CHARACTERISTIC_UUID,
+                     BLECharacteristic::PROPERTY_NOTIFY
+                   );
+  pCharacteristic->addDescriptor(new BLE2902());
 
-  ledChar = service->createCharacteristic(
-    CHAR_LED_UUID,
-    BLECharacteristic::PROPERTY_WRITE
-  );
-  ledChar->setCallbacks(new LEDCallback());
+  // Write characteristic (Phone → ESP32)
+  BLECharacteristic *pWrite = pService->createCharacteristic(
+                                WRITE_UUID,
+                                BLECharacteristic::PROPERTY_WRITE
+                              );
+  pWrite->setCallbacks(new WriteCallback());
 
-  service->start();
-  BLEDevice::startAdvertising();
+  pService->start();
+
+  // Bắt đầu quảng bá BLE
+  pServer->getAdvertising()->start();
+  Serial.println("BLE started, waiting for connection...");
 }
 
 void loop() {
-  int temp = random(20, 40); // dữ liệu cảm biến giả lập
-  sensorChar->setValue(temp);
-  delay(2000);
+  if (deviceConnected) {
+
+    String msg = "";
+
+    // Read serial input (non-blocking)
+    if (Serial.available()) {
+      msg = Serial.readStringUntil('\n');   // Read line
+    } else {
+      msg = "Hello from ESP32";             // Default message
+    }
+
+    // Send via BLE
+    pCharacteristic->setValue(msg.c_str());
+    pCharacteristic->notify();
+
+    Serial.println("Sent: " + msg);
+
+    delay(2000);
+  }
 }
+
